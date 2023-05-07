@@ -17,7 +17,7 @@
 
 export function printEnumKeys(obj: object) {
 	return Object.keys(obj)
-		.filter((x) => !Number.isInteger(parseInt(x)))
+		.filter((x) => !Number.isInteger(Number(x)))
 		.map((x) => `'${x}'`)
 		.join(", ");
 }

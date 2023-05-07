@@ -36,7 +36,7 @@ import {
 	getDatabase as adminGetDatabase,
 } from "firebase-admin/database";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { Client, ClientError } from "../client";
+import { AdminClient, BaseClient, Client, ClientError } from "../client";
 import { Connection } from "../connection";
 import { SignState } from "../types/client/client";
 import {
@@ -53,22 +53,28 @@ import {
 	RTDBEvents,
 	Unsubscription,
 } from "../types/rtdb/rtdb";
-import { Entry } from "../types/util/util";
+import { Entry } from "../types/utils/util-type";
 import { printEnumKeys } from "../utils";
 
 export class RTDB extends TypedEmitter<RTDBEvents> {
-	private _database: AdminDatabase | Database;
+	private _database!: AdminDatabase | Database;
 	private _connection: Connection;
 
-	constructor(public readonly client: Client) {
+	constructor(public readonly client: AdminClient | BaseClient | Client) {
 		super();
 
-		// TODO: Is it better to separate Simple Client from Admin Client?
+		if (this.client instanceof Client) this.client.on("sign-in", this.initDatabase.bind(this));
+
+		this.initDatabase();
+		this._connection = new Connection(this);
+	}
+
+	private initDatabase() {
 		if (!this.client.app) throw new ClientError("RTDB is called before the Sign in call");
+
 		this._database = this.isAdminApp(this.client.app)
 			? adminGetDatabase(this.client.app)
 			: getDatabase(this.client.app);
-		this._connection = new Connection(this);
 	}
 
 	public get connectionState() {
@@ -149,7 +155,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 					}
 					break;
 				default:
-					throw new TypeError(`Query constraint received: "${method}" is invalid!`);
+					throw new Error(`Query constraint received: "${method}" is invalid!`);
 			}
 		}
 
@@ -161,7 +167,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		if (typeof method !== "string") throw new TypeError("On Disconnect Query Method must be a string!");
 		if (method in OnDisconnectMethodMap) return method as OnDisconnectMethod;
 
-		throw new TypeError(`On Disconnect Query Method must be one of ${printEnumKeys(OnDisconnectMethodMap)}.`);
+		throw new Error(`On Disconnect Query Method must be one of ${printEnumKeys(OnDisconnectMethodMap)}.`);
 	}
 
 	/**
@@ -185,7 +191,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		if (!empty && path === undefined) throw new TypeError("The PATH do not exist!");
 		if (!empty && !path) throw new TypeError("PATH must be non-empty string!");
 		if (typeof path !== "string") throw new TypeError("PATH must be a string!");
-		if (path.match(/[.#$\[\]]/g)) throw new TypeError(`PATH must not contain ".", "#", "$", "[", or "]"`);
+		if (path.match(/[.#$\[\]]/g)) throw new Error(`PATH must not contain ".", "#", "$", "[", or "]"`);
 		return path.trim() || undefined;
 	}
 
@@ -216,7 +222,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		if (typeof method !== "string") throw new TypeError("Query Method must be a string!");
 		if (method in QueryMethodMap) return method as QueryMethod;
 
-		throw new TypeError(`Query Method must be one of ${printEnumKeys(QueryMethodMap)}.`);
+		throw new Error(`Query Method must be one of ${printEnumKeys(QueryMethodMap)}.`);
 	}
 
 	public async doGetQuery(path?: string, constraints?: object) {
@@ -242,7 +248,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		const pathParsed = this.checkPath(path, true);
 
 		if (typeof callback !== "function") throw new TypeError("The callback must be a function");
-		if (!(listener in ListenerMap)) throw new TypeError(`The listener "${listener}" is invalid!`);
+		if (!(listener in ListenerMap)) throw new Error(`The listener "${listener}" is invalid!`);
 		if (!(await this.isDatabaseReady())) throw new ClientError("The Client is not Signed In");
 
 		if (this.isAdmin(this._database)) {
@@ -267,7 +273,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 
 		if (typeof unsubscriptionCallback !== "function")
 			throw new TypeError("The unsubscriptionCallback must be a function");
-		if (!(listener in ListenerMap)) throw new TypeError(`The listener "${listener}" is invalid!`);
+		if (!(listener in ListenerMap)) throw new Error(`The listener "${listener}" is invalid!`);
 
 		if (this.isAdmin(this._database)) {
 			const databaseRef = pathParsed ? this._database.ref().child(pathParsed) : this._database.ref();
@@ -278,11 +284,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		}
 	}
 
-	public async doWriteQuery<K extends keyof QuerySignature>(
-		method: QueryMethod,
-		path: string,
-		...args: QuerySignature[K]
-	) {
+	public async doWriteQuery<K extends keyof QuerySignature>(method: K, path: string, ...args: QuerySignature[K]) {
 		const methodParsed = this.checkQueryMethod(method);
 		const pathParsed = this.checkPath(path, false);
 		const [value, priority] = args;
@@ -368,12 +370,13 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 			try {
 				if (!this.client.appInitialised) throw new ClientError("RTDB is called before the Sign in call");
 				if (this.client.signState === SignState.ERROR) throw new ClientError("An error occurred while signing in");
-				if (this.client.signState === SignState.SIGNED_OUT) throw new ClientError("The Client is Signed Out");
+				if (this.client.signState === SignState.SIGN_OUT) throw new ClientError("The Client is Signed Out");
 				if (this.client.signState === SignState.SIGNED_IN) return resolve(true);
 
 				const signedInCallback = (isClientSignedIn: boolean) => resolve(isClientSignedIn);
 
-				this.client.once("signed-in", signedInCallback);
+				if (this.client instanceof Client) this.client.once("signed-in", signedInCallback);
+				if (this.client instanceof BaseClient) this.client.once("signed-in", signedInCallback);
 			} catch (error) {
 				reject(error);
 			}
@@ -381,7 +384,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 	}
 
 	public async setOnDisconnectQuery<K extends keyof OnDisconnectSignature>(
-		method: OnDisconnectMethod,
+		method: K,
 		path: string,
 		...args: OnDisconnectSignature[K]
 	) {
@@ -409,7 +412,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 					break;
 				}
 
-				throw new Error("The value must be an object with 'update' query.");
+				throw new TypeError("The value must be an object with 'update' query.");
 			case "setWithPriority":
 				await databaseRef[methodParsed](value, this.checkPriority(priority));
 				break;

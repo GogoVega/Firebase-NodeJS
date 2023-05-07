@@ -17,17 +17,16 @@
 
 import { FirebaseOptions } from "firebase/app";
 import { UserCredential } from "firebase/auth";
-import { AppOptions } from "firebase-admin/app";
 
-export interface ClientEvents {
+export type AppConfig = FirebaseOptions;
+
+export interface BaseClientEvents {
 	"deleting-client": () => void;
 	"signed-in": (success: boolean) => void;
 	"sign-in": () => void;
 	"sign-out": () => void;
 	warn: (msg: string) => void;
 }
-
-export type AppConfig = Omit<AppOptions, "credential" | "serviceAccountId"> | FirebaseOptions;
 
 export interface ServiceAccount {
 	clientEmail: string;
@@ -44,12 +43,6 @@ export interface ServiceAccountId {
 }
 
 export type Credentials = ServiceAccount | ServiceAccountId;
-
-export type JSONContent = Partial<ServiceAccount> & {
-	project_id?: string;
-	client_email?: string;
-	private_key?: string;
-};
 
 export enum SignState {
 	"NOT_YET",

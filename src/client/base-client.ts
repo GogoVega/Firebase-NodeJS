@@ -26,22 +26,24 @@ import {
 	signInWithEmailAndPassword,
 	signOut,
 } from "firebase/auth";
-import { cert } from "firebase-admin/app";
-import { Auth as AdminAuth, getAuth as adminGetAuth } from "firebase-admin/auth";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { ClientError } from "./client-error";
-import { checkJSONCredential, createCustomToken } from "./utils";
-import { AdminApp, App } from "../app";
-import { AppConfig, ClientEvents, Credentials, ServiceAccountId, SignInFn, SignState } from "../types/client/client";
+import { createCustomToken } from "./utils";
+import { App } from "../app";
+import { AppConfig, BaseClientEvents, Credentials, SignInFn, SignState } from "../types/client/base-client";
 
-export class Client extends TypedEmitter<ClientEvents> {
-	private _app?: AdminApp | App;
+export class BaseClient extends TypedEmitter<BaseClientEvents> {
+	private _app: App;
+	private _appDeleted = false;
 	private _appInitialised = false;
-	private _auth?: AdminAuth | Auth;
+	private _auth: Auth;
 	private _signState: SignState = SignState.NOT_YET;
 
-	constructor(protected config: AppConfig, protected appName?: string) {
+	constructor(config: AppConfig, appName?: string) {
 		super();
+		this._app = new App(config, appName);
+		this._appInitialised = true;
+		this._auth = getAuth(this._app.app);
 	}
 
 	public get app() {
@@ -56,50 +58,42 @@ export class Client extends TypedEmitter<ClientEvents> {
 		return this._app?.admin;
 	}
 
+	public get isDeleted() {
+		return this._appDeleted;
+	}
+
 	public get signState() {
 		return this._signState;
 	}
 
-	protected initSignIn(admin: true, cred: Credentials): AdminAuth;
-	protected initSignIn(admin?: false): Auth;
-	protected initSignIn(admin?: boolean, cred?: Credentials) {
-		const credential = cred
-			? "serviceAccountId" in cred
-				? (cred as ServiceAccountId)
-				: { credential: cert(checkJSONCredential(cred)) }
-			: {};
-		const options = admin ? { ...this.config, ...credential } : this.config;
+	public deleteClient() {
+		if (this._appDeleted === true) throw new ClientError("Client already deleted");
 
-		this._app = admin ? new AdminApp(options, this.appName) : new App(options, this.appName);
-		this._appInitialised = true;
-		this.emit("sign-in");
-		this._auth = this._app instanceof AdminApp ? adminGetAuth(this._app.app) : getAuth(this._app.app);
-		return this._auth;
+		this._appDeleted = true;
+		this.emit("deleting-client");
+		return this._app.deleteApp();
 	}
 
 	public signInAnonymously() {
 		return this.wrapSignIn(() => {
-			const auth = this.initSignIn();
-			return signInAnonymously(auth);
+			return signInAnonymously(this._auth);
 		});
 	}
 
 	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object) {
 		return this.wrapSignIn(async () => {
 			const token = await createCustomToken(cred, uid, claims);
-			const auth = this.initSignIn();
-			return signInWithCustomToken(auth, token);
+			return signInWithCustomToken(this._auth, token);
 		});
 	}
 
 	public async signInWithEmailAndPassword(email: string, password: string, createUser?: boolean) {
 		return this.wrapSignIn(async () => {
-			const auth = this.initSignIn();
 			// Checks if the user already has an account otherwise it creates one
-			const method = await fetchSignInMethodsForEmail(auth, email);
+			const method = await fetchSignInMethodsForEmail(this._auth, email);
 
 			if (method.length === 0 && createUser) {
-				const user = await createUserWithEmailAndPassword(auth, email, password);
+				const user = await createUserWithEmailAndPassword(this._auth, email, password);
 
 				this.emit(
 					"warn",
@@ -107,62 +101,31 @@ export class Client extends TypedEmitter<ClientEvents> {
 				);
 				return user;
 			} else if (method.includes("password")) {
-				return signInWithEmailAndPassword(auth, email, password);
-				// TODO: to see... else if (method.includes("link")) {}
+				return signInWithEmailAndPassword(this._auth, email, password);
 			} else {
 				throw new FirebaseError("auth/unknown-email", "Unknown email");
 			}
 		});
 	}
 
-	public signInWithPrivateKey(projectId: string, clientEmail: string, privateKey: string) {
-		let success = false;
-
-		try {
-			this.initSignIn(true, { clientEmail, privateKey, projectId });
-			this._signState = SignState.SIGNED_IN;
-			success = true;
-		} finally {
-			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
-		}
-	}
-
-	/**
-	 * Only available for Google Functions, this shit
-	 * https://github.com/firebase/firebase-admin-node/issues/224
-	 * @param serviceAccountId
-	 */
-	public signInWithServiceAccountId(serviceAccountId: string) {
-		let success = false;
-
-		try {
-			this.initSignIn(true, { serviceAccountId });
-			this._signState = SignState.SIGNED_IN;
-			success = true;
-		} finally {
-			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
-		}
-	}
-
-	public async signOut() {
+	public signOut() {
 		if (this._signState === SignState.NOT_YET) throw new ClientError("signOut called before signIn call");
 		if (this._signState === SignState.SIGN_OUT) throw new ClientError("signOut already called");
+		if (this._appDeleted === true) throw new ClientError("Client deleted");
 
 		this._signState = SignState.SIGN_OUT;
 		this.emit("sign-out");
-
-		if (!this._app?.admin) await signOut(this._auth as Auth);
-		return this._app?.deleteApp();
+		return signOut(this._auth);
 	}
 
 	protected async wrapSignIn(signInFn: SignInFn) {
 		let success = false;
 
 		if (this._signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
+		if (this._appDeleted === true) throw new ClientError("Client deleted");
 
 		try {
+			this.emit("sign-in");
 			const user = await signInFn();
 			this._signState = SignState.SIGNED_IN;
 			success = true;

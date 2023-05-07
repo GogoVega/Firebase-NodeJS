@@ -15,9 +15,18 @@
  * limitations under the License.
  */
 
-export { cert } from "firebase-admin/app";
-export * from "./admin-client";
-export * from "./base-client";
-export * from "./client";
-export * from "./client-error";
-export * from "./utils";
+import { AppOptions } from "firebase-admin/app";
+
+export interface AdminClientEvents {
+	"deleting-client": () => void;
+}
+
+export type AppConfig = AppOptions;
+
+export enum SignState {
+	"NOT_YET",
+	"SIGN_IN",
+	"SIGN_OUT",
+	"SIGNED_IN",
+	"ERROR",
+}

@@ -16,9 +16,10 @@
  */
 
 import { Database, onValue, ref, Unsubscribe } from "firebase/database";
+import { nextTick } from "process";
+import { AdminClient, Client } from "../client";
 import { RTDB } from "../rtdb";
 import { ConnectionStatus } from "../types/connection/connection";
-import { nextTick } from "process";
 
 export class Connection {
 	private _state: ConnectionStatus = ConnectionStatus.disconnected;
@@ -27,18 +28,25 @@ export class Connection {
 	private timeoutID: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(protected database: RTDB) {
-		// TODO: Check for double call
-		this.database.client.on("sign-in", this.subscribeConnectionState.bind(this));
+		const client = this.database.client;
+
 		nextTick(this.subscribeConnectionState.bind(this));
 
-		this.database.client.on("sign-out", this.removeConnectionState.bind(this));
+		if (client instanceof Client) {
+			client.on("sign-in", this.subscribeConnectionState.bind(this));
+			client.on("sign-out", this.removeConnectionState.bind(this));
+		} else if (client instanceof AdminClient) {
+			client.once("deleting-client", this.removeConnectionState.bind(this));
+		} else {
+			client.once("deleting-client", this.removeConnectionState.bind(this));
+		}
 	}
 
 	public get state() {
 		return this._state;
 	}
 
-	public subscribeConnectionState() {
+	private subscribeConnectionState() {
 		this.subscriptionCallback = onValue(
 			ref(this.database.database as Database, ".info/connected"),
 			(snapshot) => {
@@ -67,7 +75,9 @@ export class Connection {
 		);
 	}
 
-	public removeConnectionState() {
+	private removeConnectionState() {
 		if (this.subscriptionCallback) this.subscriptionCallback();
+
+		this.subscriptionCallback = undefined;
 	}
 }

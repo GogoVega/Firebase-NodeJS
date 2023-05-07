@@ -15,15 +15,23 @@ const firebaseConfig = {
 const client = new Client(firebaseConfig);
 client
   .on("sign-in", () => console.log("Sign In..."))
+  .on("sign-out", () => console.log("Sign Out..."))
   .on("signed-in", (success) => console.log("Signed In:", success))
   .signInAnonymously();
 
 const rtdb = new RTDB(client)
   .on("connecting", () => console.log("Connecting..."))
   .on("connected", () => console.log("Connected"))
-  .on("disconnect", () => console.log("Disconnect"))
-  .doGetQuery("users")
-  .then((snapshot) => console.log(snapshot.val()));
+  .on("disconnect", () => console.log("Disconnect"));
+
+// Fetches data from "users" path
+rtdb.doGetQuery("users").then((snapshot) => console.log(snapshot.val()));
+
+// Set data at the target "users" path
+rtdb.doWriteQuery("set", "users", { id: "alanIsAwesome" });
+
+// Subscribes to data at "users" path, which yields a payload whenever a value changes.
+rtdb.doSubscriptionQuery("value", (snapshot) => console.log(snapshot.val()), "users");
 ```
 
 ## TODO List
