@@ -15,4 +15,9 @@
  * limitations under the License.
  */
 
-export { onLog } from "firebase/app";
+export class RTDBError extends Error {
+	constructor(msg: string) {
+		super(msg);
+		this.name = "RTDBError";
+	}
+}

@@ -36,9 +36,9 @@ import {
 	getDatabase as adminGetDatabase,
 } from "firebase-admin/database";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { AdminClient, BaseClient, Client, ClientError } from "../client";
+import { RTDBError } from "./rtdb-error";
+import { AdminClient, BaseClient } from "../client";
 import { Connection } from "../connection";
-import { SignState } from "../types/client/client";
 import {
 	DBRef,
 	Listener,
@@ -60,21 +60,13 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 	private _database!: AdminDatabase | Database;
 	private _connection: Connection;
 
-	constructor(public readonly client: AdminClient | BaseClient | Client) {
+	constructor(public readonly client: AdminClient | BaseClient) {
+		if (!(client instanceof AdminClient) && !(client instanceof BaseClient))
+			throw new TypeError("RTDB must be instantiated with Client as parameter");
+
 		super();
-
-		if (this.client instanceof Client) this.client.on("sign-in", this.initDatabase.bind(this));
-
-		this.initDatabase();
+		this.getDatabase();
 		this._connection = new Connection(this);
-	}
-
-	private initDatabase() {
-		if (!this.client.app) throw new ClientError("RTDB is called before the Sign in call");
-
-		this._database = this.isAdminApp(this.client.app)
-			? adminGetDatabase(this.client.app)
-			: getDatabase(this.client.app);
 	}
 
 	public get connectionState() {
@@ -225,10 +217,8 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		throw new Error(`Query Method must be one of ${printEnumKeys(QueryMethodMap)}.`);
 	}
 
-	public async doGetQuery(path?: string, constraints?: object) {
+	public doGetQuery(path?: string, constraints?: object) {
 		const pathParsed = this.checkPath(path, true);
-
-		if (!(await this.isDatabaseReady())) throw new ClientError("The Client is not Signed In");
 
 		if (this.isAdmin(this.database)) {
 			const database = pathParsed ? this.database.ref().child(pathParsed) : this.database.ref();
@@ -239,17 +229,16 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		return get(query(ref(this.database, pathParsed), ...this.applyQueryConstraints(constraints)));
 	}
 
-	public async doSubscriptionQuery(
+	public doSubscriptionQuery(
 		listener: Listener,
 		callback: (snapshot: AdminDataSnapshot | DataSnapshot, previousChildName?: string | null) => void,
 		path?: string,
 		constraints?: QueryConstraintType
-	): Promise<Unsubscription> {
+	): Unsubscription {
 		const pathParsed = this.checkPath(path, true);
 
 		if (typeof callback !== "function") throw new TypeError("The callback must be a function");
 		if (!(listener in ListenerMap)) throw new Error(`The listener "${listener}" is invalid!`);
-		if (!(await this.isDatabaseReady())) throw new ClientError("The Client is not Signed In");
 
 		if (this.isAdmin(this._database)) {
 			const databaseRef = pathParsed ? this._database.ref().child(pathParsed) : this._database.ref();
@@ -288,8 +277,6 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		const methodParsed = this.checkQueryMethod(method);
 		const pathParsed = this.checkPath(path, false);
 		const [value, priority] = args;
-
-		if (!(await this.isDatabaseReady())) throw new ClientError("The Client is not Signed In");
 
 		if (this.isAdmin(this._database)) {
 			switch (methodParsed) {
@@ -343,6 +330,14 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		}
 	}
 
+	private getDatabase() {
+		if (!this.client.clientInitialised) throw new RTDBError("RTDB is called before the Client is initialized");
+
+		this._database = this.isAdminApp(this.client.app)
+			? adminGetDatabase(this.client.app)
+			: getDatabase(this.client.app);
+	}
+
 	public goOffline() {
 		this._database instanceof Database ? goOffline(this._database) : this._database.goOffline();
 	}
@@ -354,33 +349,15 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
 	protected isAdmin(db: AdminDatabase | Database): db is AdminDatabase {
-		if (this.client.isAdmin === undefined) throw new ClientError("Property 'isAdmin' missing in App class");
-		return this.client.isAdmin;
+		if (this.client.admin === undefined) throw new RTDBError("Property 'admin' missing in App class");
+		return this.client.admin;
 	}
 
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
 	protected isAdminApp(app: App | FirebaseApp): app is App {
-		if (this.client.isAdmin === undefined) throw new ClientError("Property 'isAdmin' missing in App class");
-		return this.client.isAdmin;
-	}
-
-	protected isDatabaseReady() {
-		return new Promise((resolve, reject) => {
-			try {
-				if (!this.client.appInitialised) throw new ClientError("RTDB is called before the Sign in call");
-				if (this.client.signState === SignState.ERROR) throw new ClientError("An error occurred while signing in");
-				if (this.client.signState === SignState.SIGN_OUT) throw new ClientError("The Client is Signed Out");
-				if (this.client.signState === SignState.SIGNED_IN) return resolve(true);
-
-				const signedInCallback = (isClientSignedIn: boolean) => resolve(isClientSignedIn);
-
-				if (this.client instanceof Client) this.client.once("signed-in", signedInCallback);
-				if (this.client instanceof BaseClient) this.client.once("signed-in", signedInCallback);
-			} catch (error) {
-				reject(error);
-			}
-		});
+		if (this.client.admin === undefined) throw new RTDBError("Property 'admin' missing in App class");
+		return this.client.admin;
 	}
 
 	public async setOnDisconnectQuery<K extends keyof OnDisconnectSignature>(
@@ -391,8 +368,6 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		const methodParsed = this.checkOnDisconnectQueryMethod(method);
 		const pathParsed = this.checkPath(path, false);
 		const [value, priority] = args;
-
-		if (!(await this.isDatabaseReady())) throw new ClientError("The Client is not Signed In");
 
 		const databaseRef = this.isAdmin(this._database)
 			? this._database.ref().child(pathParsed).onDisconnect()

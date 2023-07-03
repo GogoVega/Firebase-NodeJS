@@ -16,14 +16,14 @@
  */
 
 import { FirebaseOptions } from "firebase/app";
-import { UserCredential } from "firebase/auth";
 import { AppOptions } from "firebase-admin/app";
 
 export interface ClientEvents {
 	"deleting-client": () => void;
-	"signed-in": (success: boolean) => void;
 	"sign-in": () => void;
 	"sign-out": () => void;
+	"signed-in": () => void;
+	"sign-in-error": () => void;
 	warn: (msg: string) => void;
 }
 
@@ -58,5 +58,3 @@ export enum SignState {
 	"SIGNED_IN",
 	"ERROR",
 }
-
-export type SignInFn = () => Promise<UserCredential>;

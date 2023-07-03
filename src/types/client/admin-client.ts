@@ -19,6 +19,9 @@ import { AppOptions } from "firebase-admin/app";
 
 export interface AdminClientEvents {
 	"deleting-client": () => void;
+	"sign-in": () => void;
+	"sign-in-error": () => void;
+	"signed-in": () => void;
 }
 
 export type AppConfig = AppOptions;
@@ -26,7 +29,6 @@ export type AppConfig = AppOptions;
 export enum SignState {
 	"NOT_YET",
 	"SIGN_IN",
-	"SIGN_OUT",
 	"SIGNED_IN",
 	"ERROR",
 }

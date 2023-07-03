@@ -19,5 +19,5 @@ export enum ConnectionStatus {
 	"disconnected",
 	"connecting",
 	"connected",
-	"re-connecting",
+	"re_connecting",
 }

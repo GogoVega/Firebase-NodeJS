@@ -24,6 +24,7 @@ export interface RTDBEvents {
 	disconnect: () => void;
 	disconnected: () => void;
 	"re-connecting": () => void;
+	log: (msg: string) => void;
 }
 
 export enum ListenerMap {

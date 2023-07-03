@@ -1,7 +1,7 @@
 {
   "name": "@gogovega/firebase-nodejs",
   "version": "0.0.1-alpha.1",
-  "description": "JavaScript library for Node.js to communicate with Google Firebase",
+  "description": "Node.js library to communicate with Google Firebase",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "scripts": {

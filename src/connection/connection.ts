@@ -17,7 +17,6 @@
 
 import { Database, onValue, ref, Unsubscribe } from "firebase/database";
 import { nextTick } from "process";
-import { AdminClient, Client } from "../client";
 import { RTDB } from "../rtdb";
 import { ConnectionStatus } from "../types/connection/connection";
 
@@ -28,18 +27,7 @@ export class Connection {
 	private timeoutID: ReturnType<typeof setTimeout> | undefined;
 
 	constructor(protected database: RTDB) {
-		const client = this.database.client;
-
-		nextTick(this.subscribeConnectionState.bind(this));
-
-		if (client instanceof Client) {
-			client.on("sign-in", this.subscribeConnectionState.bind(this));
-			client.on("sign-out", this.removeConnectionState.bind(this));
-		} else if (client instanceof AdminClient) {
-			client.once("deleting-client", this.removeConnectionState.bind(this));
-		} else {
-			client.once("deleting-client", this.removeConnectionState.bind(this));
-		}
+		nextTick(() => this.subscribeConnectionState());
 	}
 
 	public get state() {
@@ -47,6 +35,7 @@ export class Connection {
 	}
 
 	private subscribeConnectionState() {
+		const databaseURL = this.database.database.app.options.databaseURL;
 		this.subscriptionCallback = onValue(
 			ref(this.database.database as Database, ".info/connected"),
 			(snapshot) => {
@@ -58,15 +47,22 @@ export class Connection {
 					this._state = ConnectionStatus.connected;
 					this.firstConnectionEtablished = true;
 					this.database.emit("connected");
+					this.database.emit("log", `Connected to Firebase RTDB: ${databaseURL}`);
 				} else {
 					// Based on maximum time for Firebase admin
-					this.timeoutID = setTimeout(() => this.database.emit("disconnected"), 30000);
-					this._state = this.firstConnectionEtablished
-						? ConnectionStatus["re-connecting"]
-						: ConnectionStatus.connecting;
+					this.timeoutID = setTimeout(() => {
+						this._state = ConnectionStatus.disconnected;
+						this.database.emit("disconnected");
+					}, 30000);
+
+					this._state = this.firstConnectionEtablished ? ConnectionStatus.re_connecting : ConnectionStatus.connecting;
 
 					if (this.firstConnectionEtablished === true) this.database.emit("disconnect");
 					this.firstConnectionEtablished ? this.database.emit("re-connecting") : this.database.emit("connecting");
+					this.database.emit(
+						"log",
+						`${this.firstConnectionEtablished ? "Re-" : ""}Connecting to Firebase RTDB: ${databaseURL}`
+					);
 				}
 			},
 			(error) => {
@@ -75,7 +71,8 @@ export class Connection {
 		);
 	}
 
-	private removeConnectionState() {
+	// TODO: détacher l'écouteur ?
+	public removeConnectionState() {
 		if (this.subscriptionCallback) this.subscriptionCallback();
 
 		this.subscriptionCallback = undefined;

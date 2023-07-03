@@ -31,6 +31,10 @@ type ObjectEntry<T extends object> = T extends object
 		: never
 	: never;
 
+/**
+ * These type definitions come from the
+ * {@link https://dev.to/harry0000/a-bit-convenient-typescript-type-definitions-for-objectentries-d6g | DEV Community}.
+ */
 export type Entry<T extends object> = T extends readonly [unknown, ...unknown[]]
 	? TupleEntry<T>
 	: T extends ReadonlyArray<infer U>

@@ -15,5 +15,6 @@
  * limitations under the License.
  */
 
+export { cert, FirebaseError } from "firebase-admin/app";
 export * from "./admin-app";
 export * from "./app";

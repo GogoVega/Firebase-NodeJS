@@ -18,6 +18,6 @@
 export class ClientError extends Error {
 	constructor(msg: string) {
 		super(msg);
-		this.name = "CLIENT_ERROR";
+		this.name = "ClientError";
 	}
 }

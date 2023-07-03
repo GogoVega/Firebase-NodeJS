@@ -15,117 +15,89 @@
  * limitations under the License.
  */
 
-import { FirebaseError } from "firebase/app";
-import {
-	Auth,
-	createUserWithEmailAndPassword,
-	fetchSignInMethodsForEmail,
-	getAuth,
-	signInAnonymously,
-	signInWithCustomToken,
-	signInWithEmailAndPassword,
-	signOut,
-} from "firebase/auth";
 import { cert } from "firebase-admin/app";
-import { Auth as AdminAuth, getAuth as adminGetAuth } from "firebase-admin/auth";
 import { TypedEmitter } from "tiny-typed-emitter";
+import { AdminClient } from "./admin-client";
+import { BaseClient } from "./base-client";
 import { ClientError } from "./client-error";
-import { checkJSONCredential, createCustomToken } from "./utils";
-import { AdminApp, App } from "../app";
-import { AppConfig, ClientEvents, Credentials, ServiceAccountId, SignInFn, SignState } from "../types/client/client";
+import { checkJSONCredential } from "./utils";
+import { AppConfig, ClientEvents, Credentials, SignState } from "../types/client/client";
 
 export class Client extends TypedEmitter<ClientEvents> {
-	private _app?: AdminApp | App;
-	private _appInitialised = false;
-	private _auth?: AdminAuth | Auth;
-	private _signState: SignState = SignState.NOT_YET;
+	private client?: AdminClient | BaseClient;
 
 	constructor(protected config: AppConfig, protected appName?: string) {
 		super();
 	}
 
+	public get admin() {
+		return this.client?.admin;
+	}
+
 	public get app() {
-		return this._app?.app;
+		return this.client?.app;
 	}
 
-	public get appInitialised() {
-		return this._appInitialised;
+	public get clientDeleted() {
+		return this.client?.clientDeleted;
 	}
 
-	public get isAdmin() {
-		return this._app?.admin;
+	public get clientInitialised() {
+		return this.client?.clientInitialised;
 	}
 
 	public get signState() {
-		return this._signState;
+		return this.client?.signState || SignState.NOT_YET;
 	}
 
-	protected initSignIn(admin: true, cred: Credentials): AdminAuth;
-	protected initSignIn(admin?: false): Auth;
-	protected initSignIn(admin?: boolean, cred?: Credentials) {
-		const credential = cred
-			? "serviceAccountId" in cred
-				? (cred as ServiceAccountId)
-				: { credential: cert(checkJSONCredential(cred)) }
-			: {};
-		const options = admin ? { ...this.config, ...credential } : this.config;
-
-		this._app = admin ? new AdminApp(options, this.appName) : new App(options, this.appName);
-		this._appInitialised = true;
-		this.emit("sign-in");
-		this._auth = this._app instanceof AdminApp ? adminGetAuth(this._app.app) : getAuth(this._app.app);
-		return this._auth;
+	private attachListeners() {
+		if (this.client instanceof AdminClient) {
+			this.client
+				.on("deleting-client", () => this.emit("deleting-client"))
+				.on("sign-in", () => this.emit("sign-in"))
+				.on("signed-in", () => this.emit("signed-in"))
+				.on("sign-in-error", () => this.emit("sign-in-error"));
+		} else if (this.client instanceof BaseClient) {
+			this.client
+				.on("deleting-client", () => this.emit("deleting-client"))
+				.on("sign-in", () => this.emit("sign-in"))
+				.on("sign-out", () => this.emit("sign-out"))
+				.on("signed-in", () => this.emit("signed-in"))
+				.on("sign-in-error", () => this.emit("sign-in-error"))
+				.on("warn", (msg) => this.emit("warn", msg));
+		}
 	}
 
 	public signInAnonymously() {
-		return this.wrapSignIn(() => {
-			const auth = this.initSignIn();
-			return signInAnonymously(auth);
-		});
+		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
+
+		this.client = new BaseClient(this.config, this.appName);
+		this.attachListeners();
+		return this.client.signInAnonymously();
 	}
 
 	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object) {
-		return this.wrapSignIn(async () => {
-			const token = await createCustomToken(cred, uid, claims);
-			const auth = this.initSignIn();
-			return signInWithCustomToken(auth, token);
-		});
+		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
+
+		this.client = new BaseClient(this.config, this.appName);
+		this.attachListeners();
+		return this.client.signInWithCustomToken(cred, uid, claims);
 	}
 
-	public async signInWithEmailAndPassword(email: string, password: string, createUser?: boolean) {
-		return this.wrapSignIn(async () => {
-			const auth = this.initSignIn();
-			// Checks if the user already has an account otherwise it creates one
-			const method = await fetchSignInMethodsForEmail(auth, email);
+	public signInWithEmailAndPassword(email: string, password: string, createUser?: boolean) {
+		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
-			if (method.length === 0 && createUser) {
-				const user = await createUserWithEmailAndPassword(auth, email, password);
-
-				this.emit(
-					"warn",
-					`The user "${email}" has been successfully created. You can delete it in the Authenticate section if it is an error.`
-				);
-				return user;
-			} else if (method.includes("password")) {
-				return signInWithEmailAndPassword(auth, email, password);
-				// TODO: to see... else if (method.includes("link")) {}
-			} else {
-				throw new FirebaseError("auth/unknown-email", "Unknown email");
-			}
-		});
+		this.client = new BaseClient(this.config, this.appName);
+		this.attachListeners();
+		return this.client.signInWithEmailAndPassword(email, password, createUser);
 	}
 
 	public signInWithPrivateKey(projectId: string, clientEmail: string, privateKey: string) {
-		let success = false;
+		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
-		try {
-			this.initSignIn(true, { clientEmail, privateKey, projectId });
-			this._signState = SignState.SIGNED_IN;
-			success = true;
-		} finally {
-			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
-		}
+		const credential = { credential: cert(checkJSONCredential({ clientEmail, privateKey, projectId })) };
+		this.client = new AdminClient({ ...this.config, ...credential }, this.appName);
+		this.attachListeners();
 	}
 
 	/**
@@ -134,42 +106,19 @@ export class Client extends TypedEmitter<ClientEvents> {
 	 * @param serviceAccountId
 	 */
 	public signInWithServiceAccountId(serviceAccountId: string) {
-		let success = false;
+		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
-		try {
-			this.initSignIn(true, { serviceAccountId });
-			this._signState = SignState.SIGNED_IN;
-			success = true;
-		} finally {
-			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
-		}
+		this.client = new AdminClient({ ...this.config, serviceAccountId }, this.appName);
+		this.attachListeners();
 	}
 
 	public async signOut() {
-		if (this._signState === SignState.NOT_YET) throw new ClientError("signOut called before signIn call");
-		if (this._signState === SignState.SIGN_OUT) throw new ClientError("signOut already called");
+		if (this.signState === SignState.NOT_YET) throw new ClientError("signOut called before signIn call");
+		if (this.signState === SignState.SIGN_OUT) throw new ClientError("signOut already called");
+		if (!this.client) throw new ClientError("Client to delete missing");
 
-		this._signState = SignState.SIGN_OUT;
-		this.emit("sign-out");
+		if (!this.admin) await (this.client as BaseClient).signOut();
 
-		if (!this._app?.admin) await signOut(this._auth as Auth);
-		return this._app?.deleteApp();
-	}
-
-	protected async wrapSignIn(signInFn: SignInFn) {
-		let success = false;
-
-		if (this._signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
-
-		try {
-			const user = await signInFn();
-			this._signState = SignState.SIGNED_IN;
-			success = true;
-			return user;
-		} finally {
-			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
-		}
+		return this.client.deleteClient();
 	}
 }

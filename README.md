@@ -1,6 +1,6 @@
 # Firebase-NodeJS
 
-JavaScript library for Node.js to communicate with Google Firebase.
+Node.js library to communicate with Google Firebase.
 
 **WARNING**: work in progress!!!
 
@@ -16,22 +16,24 @@ const client = new Client(firebaseConfig);
 client
   .on("sign-in", () => console.log("Sign In..."))
   .on("sign-out", () => console.log("Sign Out..."))
-  .on("signed-in", (success) => console.log("Signed In:", success))
+  .on("signed-in", () => console.log("Signed In"))
   .signInAnonymously();
 
 const rtdb = new RTDB(client)
   .on("connecting", () => console.log("Connecting..."))
-  .on("connected", () => console.log("Connected"))
-  .on("disconnect", () => console.log("Disconnect"));
+  .on("disconnect", () => console.log("Disconnect"))
+  .on("connected", () => {
+    console.log("Connected");
 
-// Fetches data from "users" path
-rtdb.doGetQuery("users").then((snapshot) => console.log(snapshot.val()));
+    // Fetches data from "users" path
+    rtdb.doGetQuery("users").then((snapshot) => console.log(snapshot.val()));
 
-// Set data at the target "users" path
-rtdb.doWriteQuery("set", "users", { id: "alanIsAwesome" });
+    // Set data at the target "users" path
+    rtdb.doWriteQuery("set", "users", { id: "alanIsAwesome" });
 
-// Subscribes to data at "users" path, which yields a payload whenever a value changes.
-rtdb.doSubscriptionQuery("value", (snapshot) => console.log(snapshot.val()), "users");
+    // Subscribes to data at "users" path, which yields a payload whenever a value changes.
+    rtdb.doSubscriptionQuery("value", (snapshot) => console.log(snapshot.val()), "users");
+  });
 ```
 
 ## TODO List

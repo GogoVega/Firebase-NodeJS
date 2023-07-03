@@ -15,4 +15,5 @@
  * limitations under the License.
  */
 
-export * from "./firebase";
+export { onLog } from "firebase/app";
+export { LogCallbackParams } from "@firebase/logger/dist/src/logger";

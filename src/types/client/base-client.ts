@@ -22,9 +22,10 @@ export type AppConfig = FirebaseOptions;
 
 export interface BaseClientEvents {
 	"deleting-client": () => void;
-	"signed-in": (success: boolean) => void;
 	"sign-in": () => void;
 	"sign-out": () => void;
+	"signed-in": () => void;
+	"sign-in-error": () => void;
 	warn: (msg: string) => void;
 }
 

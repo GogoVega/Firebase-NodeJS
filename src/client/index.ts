@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-export { cert } from "firebase-admin/app";
 export * from "./admin-client";
 export * from "./base-client";
 export * from "./client";

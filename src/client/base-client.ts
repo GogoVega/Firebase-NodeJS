@@ -46,20 +46,20 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 		this._auth = getAuth(this._app.app);
 	}
 
+	public get admin() {
+		return this._app?.admin;
+	}
+
 	public get app() {
 		return this._app?.app;
 	}
 
-	public get appInitialised() {
-		return this._appInitialised;
-	}
-
-	public get isAdmin() {
-		return this._app?.admin;
-	}
-
-	public get isDeleted() {
+	public get clientDeleted() {
 		return this._appDeleted;
+	}
+
+	public get clientInitialised() {
+		return this._appInitialised;
 	}
 
 	public get signState() {
@@ -75,9 +75,7 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 	}
 
 	public signInAnonymously() {
-		return this.wrapSignIn(() => {
-			return signInAnonymously(this._auth);
-		});
+		return this.wrapSignIn(() => signInAnonymously(this._auth));
 	}
 
 	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object) {
@@ -132,7 +130,7 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 			return user;
 		} finally {
 			if (!success) this._signState = SignState.ERROR;
-			this.emit("signed-in", success);
+			this.emit(success ? "signed-in" : "sign-in-error");
 		}
 	}
 }
