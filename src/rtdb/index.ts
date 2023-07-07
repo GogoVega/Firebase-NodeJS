@@ -15,4 +15,8 @@
  * limitations under the License.
  */
 
+export { DataSnapshot } from "firebase/database";
+export { DataSnapshot as AdminDataSnapshot } from "firebase-admin/database";
 export * from "./rtdb";
+export * from "./rtdb-error";
+export * from "./types";

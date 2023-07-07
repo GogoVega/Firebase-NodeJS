@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Unsubscribe } from "firebase/database";
+import { DataSnapshot, Unsubscribe } from "firebase/database";
 import { DataSnapshot as AdminDataSnapshot, Query, Reference } from "firebase-admin/database";
 
 export interface RTDBEvents {
@@ -95,6 +95,8 @@ export interface QueryConstraintType {
 	startAfter?: RangeQuery;
 	startAt?: RangeQuery;
 }
+
+export type BothDataSnapshot = AdminDataSnapshot | DataSnapshot;
 
 export type DBRef = Reference | Query;
 

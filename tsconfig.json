@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES6",
+    "target": "ES2020",
     "module": "commonjs",
     "moduleDetection": "auto",
     "moduleResolution": "node",
@@ -14,6 +14,7 @@
     "rootDir": "src",
     "skipLibCheck": false,
     "strict": true,
+    "stripInternal": true,
   },
   "include": [
     "src"

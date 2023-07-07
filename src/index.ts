@@ -16,6 +16,7 @@
  */
 
 export * from "./client";
+export * from "./connection/types";
 export * from "./logger";
 export * from "./rtdb";
 export * from "./utils";

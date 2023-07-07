@@ -26,15 +26,15 @@ export class AdminApp {
 		this.admin = true;
 	}
 
-	public get app() {
+	public get app(): App {
 		return this._app;
 	}
 
-	private initApp(options: AppOptions, name?: string) {
+	private initApp(options: AppOptions, name?: string): App {
 		return initializeApp(options, name);
 	}
 
-	public deleteApp() {
+	public deleteApp(): Promise<void> {
 		return deleteApp(this._app);
 	}
 }

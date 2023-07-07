@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-import { cert } from "firebase-admin/app";
+import { FirebaseApp } from "firebase/app";
+import { UserCredential } from "firebase/auth";
+import { App, cert } from "firebase-admin/app";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { AdminClient } from "./admin-client";
 import { BaseClient } from "./base-client";
 import { ClientError } from "./client-error";
+import { AppConfig, ClientEvents, Credentials, SignState } from "./types";
 import { checkJSONCredential } from "./utils";
-import { AppConfig, ClientEvents, Credentials, SignState } from "../types/client/client";
 
 export class Client extends TypedEmitter<ClientEvents> {
 	private client?: AdminClient | BaseClient;
@@ -30,23 +32,23 @@ export class Client extends TypedEmitter<ClientEvents> {
 		super();
 	}
 
-	public get admin() {
+	public get admin(): boolean | undefined {
 		return this.client?.admin;
 	}
 
-	public get app() {
+	public get app(): App | FirebaseApp | undefined {
 		return this.client?.app;
 	}
 
-	public get clientDeleted() {
+	public get clientDeleted(): boolean | undefined {
 		return this.client?.clientDeleted;
 	}
 
-	public get clientInitialised() {
+	public get clientInitialised(): boolean | undefined {
 		return this.client?.clientInitialised;
 	}
 
-	public get signState() {
+	public get signState(): SignState {
 		return this.client?.signState || SignState.NOT_YET;
 	}
 
@@ -68,7 +70,7 @@ export class Client extends TypedEmitter<ClientEvents> {
 		}
 	}
 
-	public signInAnonymously() {
+	public signInAnonymously(): Promise<UserCredential> {
 		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
 		this.client = new BaseClient(this.config, this.appName);
@@ -76,7 +78,7 @@ export class Client extends TypedEmitter<ClientEvents> {
 		return this.client.signInAnonymously();
 	}
 
-	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object) {
+	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object): Promise<UserCredential> {
 		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
 		this.client = new BaseClient(this.config, this.appName);
@@ -84,7 +86,7 @@ export class Client extends TypedEmitter<ClientEvents> {
 		return this.client.signInWithCustomToken(cred, uid, claims);
 	}
 
-	public signInWithEmailAndPassword(email: string, password: string, createUser?: boolean) {
+	public signInWithEmailAndPassword(email: string, password: string, createUser?: boolean): Promise<UserCredential> {
 		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
 		this.client = new BaseClient(this.config, this.appName);
@@ -92,7 +94,7 @@ export class Client extends TypedEmitter<ClientEvents> {
 		return this.client.signInWithEmailAndPassword(email, password, createUser);
 	}
 
-	public signInWithPrivateKey(projectId: string, clientEmail: string, privateKey: string) {
+	public signInWithPrivateKey(projectId: string, clientEmail: string, privateKey: string): void {
 		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
 		const credential = { credential: cert(checkJSONCredential({ clientEmail, privateKey, projectId })) };
@@ -105,14 +107,14 @@ export class Client extends TypedEmitter<ClientEvents> {
 	 * https://github.com/firebase/firebase-admin-node/issues/224
 	 * @param serviceAccountId
 	 */
-	public signInWithServiceAccountId(serviceAccountId: string) {
+	public signInWithServiceAccountId(serviceAccountId: string): void {
 		if (this.signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");
 
 		this.client = new AdminClient({ ...this.config, serviceAccountId }, this.appName);
 		this.attachListeners();
 	}
 
-	public async signOut() {
+	public async signOut(): Promise<void> {
 		if (this.signState === SignState.NOT_YET) throw new ClientError("signOut called before signIn call");
 		if (this.signState === SignState.SIGN_OUT) throw new ClientError("signOut already called");
 		if (!this.client) throw new ClientError("Client to delete missing");

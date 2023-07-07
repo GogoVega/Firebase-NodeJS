@@ -19,15 +19,15 @@ import { FirebaseError } from "firebase/app";
 import { ServiceAccount, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { claimsNotAllowed } from "./constants";
+import { Credentials, ServiceAccountId } from "./types";
 import { AdminApp } from "../app";
-import { Credentials, ServiceAccountId } from "../types/client/client";
 
 /**
  * Check if the received JSON content credentials contain the desired elements.
  * @param content The JSON content credentials
  * @returns The JSON content credentials checked
  */
-function checkJSONCredential(content: unknown) {
+function checkJSONCredential(content: unknown): ServiceAccount {
 	if (!content || typeof content !== "object" || !Object.keys(content).length)
 		throw new TypeError("JSON Object must contain 'projectId', 'clientEmail' and 'privateKey'");
 
@@ -35,10 +35,10 @@ function checkJSONCredential(content: unknown) {
 		if (!content[key as keyof typeof content]) throw new TypeError(`JSON Content must contain '${key}'`);
 	}
 
-	return content as ServiceAccount;
+	return content;
 }
 
-async function createCustomToken(cred: Credentials, uid: string, claims?: object) {
+async function createCustomToken(cred: Credentials, uid: string, claims?: object): Promise<string> {
 	if (claims && typeof claims !== "object") throw new TypeError("Claims type must be an object");
 
 	Object.keys(claims || {}).forEach((key) => {

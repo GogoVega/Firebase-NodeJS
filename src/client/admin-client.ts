@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+import { App } from "firebase-admin/app";
 import { nextTick } from "process";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { ClientError } from "./client-error";
+import { AdminConfig, AdminClientEvents, SignState } from "./types";
 import { AdminApp } from "../app";
-import { AppConfig, AdminClientEvents, SignState } from "../types/client/admin-client";
 
 export class AdminClient extends TypedEmitter<AdminClientEvents> {
 	private _app!: AdminApp;
@@ -27,32 +28,32 @@ export class AdminClient extends TypedEmitter<AdminClientEvents> {
 	private _appInitialised = false;
 	private _signState: SignState = SignState.NOT_YET;
 
-	constructor(protected config: AppConfig, protected appName?: string) {
+	constructor(protected config: AdminConfig, protected appName?: string) {
 		super();
 		nextTick(() => this.initClient(config, appName));
 	}
 
-	public get admin() {
+	public get admin(): boolean {
 		return this._app.admin;
 	}
 
-	public get app() {
+	public get app(): App {
 		return this._app.app;
 	}
 
-	public get clientDeleted() {
+	public get clientDeleted(): boolean {
 		return this._appDeleted;
 	}
 
-	public get clientInitialised() {
+	public get clientInitialised(): boolean {
 		return this._appInitialised;
 	}
 
-	public get signState() {
+	public get signState(): SignState {
 		return this._signState;
 	}
 
-	public deleteClient() {
+	public deleteClient(): Promise<void> {
 		if (this._appDeleted === true) throw new ClientError("Client already deleted");
 
 		// TODO: Add sign-out event ?
@@ -61,7 +62,7 @@ export class AdminClient extends TypedEmitter<AdminClientEvents> {
 		return this._app.deleteApp();
 	}
 
-	private initClient(options: AppConfig, name?: string) {
+	private initClient(options: AdminConfig, name?: string) {
 		let success = false;
 
 		try {

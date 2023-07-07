@@ -26,15 +26,15 @@ export class App {
 		this.admin = false;
 	}
 
-	public get app() {
+	public get app(): FirebaseApp {
 		return this._app;
 	}
 
-	private initApp(options: FirebaseOptions, name?: string) {
+	private initApp(options: FirebaseOptions, name?: string): FirebaseApp {
 		return initializeApp(options, name);
 	}
 
-	public deleteApp() {
+	public deleteApp(): Promise<void> {
 		return deleteApp(this._app);
 	}
 }

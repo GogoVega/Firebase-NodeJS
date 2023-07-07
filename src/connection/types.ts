@@ -15,4 +15,9 @@
  * limitations under the License.
  */
 
-export { deepCopy } from "@firebase/util";
+export enum ConnectionState {
+	"DISCONNECTED",
+	"CONNECTING",
+	"CONNECTED",
+	"RE_CONNECTING",
+}

@@ -19,7 +19,6 @@ import { FirebaseApp } from "firebase/app";
 import * as database from "firebase/database";
 import {
 	Database,
-	DataSnapshot,
 	get,
 	getDatabase,
 	goOffline,
@@ -30,16 +29,11 @@ import {
 	ref,
 } from "firebase/database";
 import { App } from "firebase-admin/app";
-import {
-	Database as AdminDatabase,
-	DataSnapshot as AdminDataSnapshot,
-	getDatabase as adminGetDatabase,
-} from "firebase-admin/database";
+import { Database as AdminDatabase, getDatabase as adminGetDatabase } from "firebase-admin/database";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { RTDBError } from "./rtdb-error";
-import { AdminClient, BaseClient } from "../client";
-import { Connection } from "../connection";
 import {
+	BothDataSnapshot,
 	DBRef,
 	Listener,
 	ListenerMap,
@@ -52,16 +46,17 @@ import {
 	QuerySignature,
 	RTDBEvents,
 	Unsubscription,
-} from "../types/rtdb/rtdb";
-import { Entry } from "../types/utils/util-type";
-import { printEnumKeys } from "../utils";
+} from "./types";
+import { AdminClient, BaseClient, Client } from "../client";
+import { Connection, ConnectionState } from "../connection";
+import { Entry, printEnumKeys } from "../utils";
 
 export class RTDB extends TypedEmitter<RTDBEvents> {
-	private _database!: AdminDatabase | Database;
 	private _connection: Connection;
+	private _database!: AdminDatabase | Database;
 
-	constructor(public readonly client: AdminClient | BaseClient) {
-		if (!(client instanceof AdminClient) && !(client instanceof BaseClient))
+	constructor(public readonly client: AdminClient | BaseClient | Client) {
+		if (!(client instanceof AdminClient) && !(client instanceof BaseClient) && !(client instanceof Client))
 			throw new TypeError("RTDB must be instantiated with Client as parameter");
 
 		super();
@@ -69,11 +64,11 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		this._connection = new Connection(this);
 	}
 
-	public get connectionState() {
+	public get connectionState(): ConnectionState {
 		return this._connection.state;
 	}
 
-	public get database() {
+	public get database(): AdminDatabase | Database {
 		return this._database;
 	}
 
@@ -154,7 +149,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		return dbRef || query;
 	}
 
-	protected checkOnDisconnectQueryMethod(method: unknown) {
+	protected checkOnDisconnectQueryMethod(method: unknown): OnDisconnectMethod {
 		if (method === undefined) throw new TypeError("On Disconnect Query Method do not exist!");
 		if (typeof method !== "string") throw new TypeError("On Disconnect Query Method must be a string!");
 		if (method in OnDisconnectMethodMap) return method as OnDisconnectMethod;
@@ -209,7 +204,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 	 * @param method The Query Method to be checked
 	 * @returns The Query Method checked
 	 */
-	protected checkQueryMethod(method: unknown) {
+	protected checkQueryMethod(method: unknown): QueryMethod {
 		if (method === undefined) throw new TypeError("Query Method do not exist!");
 		if (typeof method !== "string") throw new TypeError("Query Method must be a string!");
 		if (method in QueryMethodMap) return method as QueryMethod;
@@ -217,7 +212,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		throw new Error(`Query Method must be one of ${printEnumKeys(QueryMethodMap)}.`);
 	}
 
-	public doGetQuery(path?: string, constraints?: object) {
+	public doGetQuery(path?: string, constraints?: object): Promise<BothDataSnapshot> {
 		const pathParsed = this.checkPath(path, true);
 
 		if (this.isAdmin(this.database)) {
@@ -231,7 +226,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 
 	public doSubscriptionQuery(
 		listener: Listener,
-		callback: (snapshot: AdminDataSnapshot | DataSnapshot, previousChildName?: string | null) => void,
+		callback: (snapshot: BothDataSnapshot, previousChildName?: string | null) => void,
 		path?: string,
 		constraints?: QueryConstraintType
 	): Unsubscription {
@@ -257,7 +252,7 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 		}
 	}
 
-	public doUnSubscriptionQuery(listener: Listener, unsubscriptionCallback?: Unsubscription, path?: string) {
+	public doUnSubscriptionQuery(listener: Listener, unsubscriptionCallback?: Unsubscription, path?: string): void {
 		const pathParsed = this.checkPath(path, true);
 
 		if (typeof unsubscriptionCallback !== "function")
@@ -331,7 +326,8 @@ export class RTDB extends TypedEmitter<RTDBEvents> {
 	}
 
 	private getDatabase() {
-		if (!this.client.clientInitialised) throw new RTDBError("RTDB is called before the Client is initialized");
+		if (!this.client.app || !this.client.clientInitialised)
+			throw new RTDBError("RTDB is called before the Client is initialized");
 
 		this._database = this.isAdminApp(this.client.app)
 			? adminGetDatabase(this.client.app)

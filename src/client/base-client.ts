@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { FirebaseError } from "firebase/app";
+import { FirebaseApp, FirebaseError } from "firebase/app";
 import {
 	Auth,
+	UserCredential,
 	createUserWithEmailAndPassword,
 	fetchSignInMethodsForEmail,
 	getAuth,
@@ -28,9 +29,9 @@ import {
 } from "firebase/auth";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { ClientError } from "./client-error";
+import { Config, BaseClientEvents, Credentials, SignInFn, SignState } from "./types";
 import { createCustomToken } from "./utils";
 import { App } from "../app";
-import { AppConfig, BaseClientEvents, Credentials, SignInFn, SignState } from "../types/client/base-client";
 
 export class BaseClient extends TypedEmitter<BaseClientEvents> {
 	private _app: App;
@@ -39,34 +40,34 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 	private _auth: Auth;
 	private _signState: SignState = SignState.NOT_YET;
 
-	constructor(config: AppConfig, appName?: string) {
+	constructor(config: Config, appName?: string) {
 		super();
 		this._app = new App(config, appName);
 		this._appInitialised = true;
 		this._auth = getAuth(this._app.app);
 	}
 
-	public get admin() {
+	public get admin(): boolean {
 		return this._app?.admin;
 	}
 
-	public get app() {
+	public get app(): FirebaseApp {
 		return this._app?.app;
 	}
 
-	public get clientDeleted() {
+	public get clientDeleted(): boolean {
 		return this._appDeleted;
 	}
 
-	public get clientInitialised() {
+	public get clientInitialised(): boolean {
 		return this._appInitialised;
 	}
 
-	public get signState() {
+	public get signState(): SignState {
 		return this._signState;
 	}
 
-	public deleteClient() {
+	public deleteClient(): Promise<void> {
 		if (this._appDeleted === true) throw new ClientError("Client already deleted");
 
 		this._appDeleted = true;
@@ -74,18 +75,22 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 		return this._app.deleteApp();
 	}
 
-	public signInAnonymously() {
+	public signInAnonymously(): Promise<UserCredential> {
 		return this.wrapSignIn(() => signInAnonymously(this._auth));
 	}
 
-	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object) {
+	public signInWithCustomToken(cred: Credentials, uid: string, claims?: object): Promise<UserCredential> {
 		return this.wrapSignIn(async () => {
 			const token = await createCustomToken(cred, uid, claims);
 			return signInWithCustomToken(this._auth, token);
 		});
 	}
 
-	public async signInWithEmailAndPassword(email: string, password: string, createUser?: boolean) {
+	public async signInWithEmailAndPassword(
+		email: string,
+		password: string,
+		createUser?: boolean
+	): Promise<UserCredential> {
 		return this.wrapSignIn(async () => {
 			// Checks if the user already has an account otherwise it creates one
 			const method = await fetchSignInMethodsForEmail(this._auth, email);
@@ -106,7 +111,7 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 		});
 	}
 
-	public signOut() {
+	public signOut(): Promise<void> {
 		if (this._signState === SignState.NOT_YET) throw new ClientError("signOut called before signIn call");
 		if (this._signState === SignState.SIGN_OUT) throw new ClientError("signOut already called");
 		if (this._appDeleted === true) throw new ClientError("Client deleted");
@@ -116,7 +121,7 @@ export class BaseClient extends TypedEmitter<BaseClientEvents> {
 		return signOut(this._auth);
 	}
 
-	protected async wrapSignIn(signInFn: SignInFn) {
+	protected async wrapSignIn(signInFn: SignInFn): Promise<UserCredential> {
 		let success = false;
 
 		if (this._signState === SignState.SIGNED_IN) throw new ClientError("Client already Signed in, Sign out before");

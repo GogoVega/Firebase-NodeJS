@@ -1,5 +1,5 @@
 /**
- * Copyright 2022-2023 Gauthier Dandele
+ * Copyright 2023 Gauthier Dandele
  *
  * Licensed under the MIT License,
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ type ObjectEntry<T extends object> = T extends object
 	: never;
 
 /**
- * These type definitions come from the
+ * These type definitions comes from the
  * {@link https://dev.to/harry0000/a-bit-convenient-typescript-type-definitions-for-objectentries-d6g | DEV Community}.
  */
 export type Entry<T extends object> = T extends readonly [unknown, ...unknown[]]

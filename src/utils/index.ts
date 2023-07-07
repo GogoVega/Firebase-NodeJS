@@ -15,5 +15,6 @@
  * limitations under the License.
  */
 
-export * from "./firebase";
+export { deepCopy } from "@firebase/util";
+export * from "./util-type";
 export * from "./utils";

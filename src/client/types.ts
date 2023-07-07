@@ -17,8 +17,14 @@
 
 import { FirebaseOptions } from "firebase/app";
 import { UserCredential } from "firebase/auth";
+import { AppOptions } from "firebase-admin";
 
-export type AppConfig = FirebaseOptions;
+export interface AdminClientEvents {
+	"deleting-client": () => void;
+	"sign-in": () => void;
+	"sign-in-error": () => void;
+	"signed-in": () => void;
+}
 
 export interface BaseClientEvents {
 	"deleting-client": () => void;
@@ -27,6 +33,22 @@ export interface BaseClientEvents {
 	"signed-in": () => void;
 	"sign-in-error": () => void;
 	warn: (msg: string) => void;
+}
+
+export type ClientEvents = BaseClientEvents;
+
+export type AdminConfig = AppOptions;
+
+export type AppConfig = Omit<AppOptions, "credential" | "serviceAccountId"> | FirebaseOptions;
+
+export type Config = FirebaseOptions;
+
+export enum SignState {
+	"NOT_YET",
+	"SIGN_IN",
+	"SIGN_OUT",
+	"SIGNED_IN",
+	"ERROR",
 }
 
 export interface ServiceAccount {
@@ -44,13 +66,5 @@ export interface ServiceAccountId {
 }
 
 export type Credentials = ServiceAccount | ServiceAccountId;
-
-export enum SignState {
-	"NOT_YET",
-	"SIGN_IN",
-	"SIGN_OUT",
-	"SIGNED_IN",
-	"ERROR",
-}
 
 export type SignInFn = () => Promise<UserCredential>;

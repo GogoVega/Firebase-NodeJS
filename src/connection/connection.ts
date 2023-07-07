@@ -17,11 +17,11 @@
 
 import { Database, onValue, ref, Unsubscribe } from "firebase/database";
 import { nextTick } from "process";
+import { ConnectionState } from "./types";
 import { RTDB } from "../rtdb";
-import { ConnectionStatus } from "../types/connection/connection";
 
 export class Connection {
-	private _state: ConnectionStatus = ConnectionStatus.disconnected;
+	private _state: ConnectionState = ConnectionState.DISCONNECTED;
 	private firstConnectionEtablished = false;
 	private subscriptionCallback?: Unsubscribe;
 	private timeoutID: ReturnType<typeof setTimeout> | undefined;
@@ -30,11 +30,11 @@ export class Connection {
 		nextTick(() => this.subscribeConnectionState());
 	}
 
-	public get state() {
+	public get state(): ConnectionState {
 		return this._state;
 	}
 
-	private subscribeConnectionState() {
+	private subscribeConnectionState(): void {
 		const databaseURL = this.database.database.app.options.databaseURL;
 		this.subscriptionCallback = onValue(
 			ref(this.database.database as Database, ".info/connected"),
@@ -44,18 +44,18 @@ export class Connection {
 						clearTimeout(this.timeoutID);
 						this.timeoutID = undefined;
 					}
-					this._state = ConnectionStatus.connected;
+					this._state = ConnectionState.CONNECTED;
 					this.firstConnectionEtablished = true;
 					this.database.emit("connected");
 					this.database.emit("log", `Connected to Firebase RTDB: ${databaseURL}`);
 				} else {
 					// Based on maximum time for Firebase admin
 					this.timeoutID = setTimeout(() => {
-						this._state = ConnectionStatus.disconnected;
+						this._state = ConnectionState.DISCONNECTED;
 						this.database.emit("disconnected");
 					}, 30000);
 
-					this._state = this.firstConnectionEtablished ? ConnectionStatus.re_connecting : ConnectionStatus.connecting;
+					this._state = this.firstConnectionEtablished ? ConnectionState.RE_CONNECTING : ConnectionState.CONNECTING;
 
 					if (this.firstConnectionEtablished === true) this.database.emit("disconnect");
 					this.firstConnectionEtablished ? this.database.emit("re-connecting") : this.database.emit("connecting");
@@ -72,7 +72,7 @@ export class Connection {
 	}
 
 	// TODO: détacher l'écouteur ?
-	public removeConnectionState() {
+	public removeConnectionState(): void {
 		if (this.subscriptionCallback) this.subscriptionCallback();
 
 		this.subscriptionCallback = undefined;
